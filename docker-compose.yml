@@ -1,0 +1,115 @@
+version: '3'
+networks:
+  heb:
+
+services:
+    varnish:
+      image: varnish:stable
+      container_name: varnish-heb
+      volumes:
+        - "./default.vcl:/etc/varnish/default.vcl"
+      ports:
+        - 80:80
+      tmpfs:
+        - /var/lib/varnish:exec
+      environment:
+        - VARNISH_SIZE=2G  
+      command: "-p default_keep=300"
+      depends_on:
+        - "web" 
+      networks:
+        - heb         
+
+    web:
+        image: webdevops/php-apache-dev:7.3-alpine
+        container_name: magento-heb        
+        user: application
+        environment:
+          #- WEB_ALIAS_DOMAIN=local.magento
+          - WEB_DOCUMENT_ROOT=/app/pub
+          - PHP_DATE_TIMEZONE=EST
+          - PHP_DISPLAY_ERRORS=1
+          - PHP_MEMORY_LIMIT=-1
+          - PHP_MAX_EXECUTION_TIME=3600
+          - PHP_POST_MAX_SIZE=500M
+          - PHP_UPLOAD_MAX_FILESIZE=1024M
+        volumes:
+          - ./hebmexico:/app:cached
+        ports: 
+          - 8080:80
+        expose:
+          - 8080
+        links:
+          - mysql
+        networks:
+          - heb          
+    mysql:
+        image: mysql:5.7.29
+        container_name: mysql-heb
+        ports:
+          - "3306:3306"
+        environment:
+          - MYSQL_ROOT_PASSWORD=Libra10
+          - MYSQL_DATABASE=heb
+        volumes:
+          - ./db-data:/var/lib/mysql
+        command: --innodb-buffer-pool-size=1024M
+
+
+        networks:
+          - heb          
+
+    phpmyadmin:
+        container_name: phpmyadmin-heb
+        image: phpmyadmin/phpmyadmin:latest
+        environment:
+          - MYSQL_ROOT_PASSWORD=Libra10
+          - PMA_USER=root
+          - PMA_PASSWORD=Libra10
+        ports:
+          - "8000:80"
+        links:
+          - mysql:db
+        depends_on:
+          - mysql
+
+        networks:
+          - heb
+
+    elasticsearch:        
+        build:
+          context: ./
+          dockerfile: ./elasticsearch.dockerfile        
+        #image: docker.elastic.co/elasticsearch/elasticsearch:6.8.22
+        container_name: es-heb2
+        volumes:
+          - elastic-data:/usr/share/elasticsearch
+        ports:
+          - 9200:9200
+          - 9300:9300
+        environment:
+          - cluster.name=heb3-cluster
+          - bootstrap.memory_lock=true
+          - "ES_JAVA_OPTS=-Xms256m -Xmx256m"
+          - discovery.type=single-node
+        ulimits:
+          memlock:
+            soft: -1
+            hard: -1
+        networks:
+          - heb
+
+    redis:
+        image: redis:5.0
+        container_name: redis-heb
+        ports:
+          - 6379:6379
+        volumes:
+          - redis-data:/data
+        networks:
+          - heb
+
+
+volumes:
+  elastic-data:
+  redis-data:  
